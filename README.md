@@ -4,7 +4,7 @@ MicroPython firmware for the **LILYGO T-Display-S3** (ESP32-S3, ST7789 170x320 L
 
 ## Features
 
-- 24-hour GPS-synchronized clock displayed in large 32px font
+- 24-hour GPS-synchronized clock with local time and UTC time
 - Date, satellite count, fix status, coordinates, and Maidenhead grid locator
 - Button cycles through 6 US timezones (Eastern, Central, Mountain, Pacific, Alaska, Hawaii)
 - Partial-update rendering — only redraws changed regions to minimize flicker
@@ -16,16 +16,15 @@ MicroPython firmware for the **LILYGO T-Display-S3** (ESP32-S3, ST7789 170x320 L
 
 ```
 +------------------------------------------------------------------+
-|  ZONE A: Time (top ~105px)                                       |
+|  ZONE A: Time                                                    |
 |                                                                  |
-|              14:34:56          (white, 16x32 font)               |
-|                                                                  |
-|           US Eastern (UTC-5)   (cyan, 16x16 font)               |
+|              14:34:56 EST      (white 16x16 + cyan 8x8)         |
+|              UTC 19:34:56      (gray 8x8)                        |
 +==================================================================+
-|  ZONE B: GPS Info (bottom ~65px, 16x16 font)                    |
+|  ZONE B: GPS Info (8x8 font)                                    |
 |                                                                  |
-|  2026-02-10          Sat:8/12        Fix:3D                     |
-|  40.7128 N           74.0060 W       FN20ir                     |
+|  2026-02-10       Sat:8/12       Fix:3D                         |
+|  40.7128 N        74.0060 W      FN20ir                         |
 +------------------------------------------------------------------+
 ```
 
@@ -93,7 +92,7 @@ Wraps UART1 (9600 baud) and the MicropyGPS parser. Provides:
 - Fix tracking (`has_ever_had_fix` for persistent display after signal loss)
 
 ### `display_manager.py`
-Two-zone screen layout with cached partial updates. Each text region is tracked by key — only redrawn when the value changes. Uses `vga1_bold_16x32` for time and `vga1_bold_16x16` for GPS info.
+Two-zone screen layout with cached partial updates. Each text region is tracked by key — only redrawn when the value changes. Uses `vga1_16x16` for local time and `vga1_8x8` for UTC time, timezone, and GPS info.
 
 ### `main.py`
 Initialization sequence (display, GPS, timezone, display manager) followed by the main loop:
@@ -113,4 +112,4 @@ Initialization sequence (display, GPS, timezone, display manager) followed by th
 
 - **No DST handling** — offsets are standard time only
 - **Timezone resets on reboot** — defaults to Eastern, not persisted
-- **Font size** — uses 32px built-in font; larger custom fonts require running `font2bitmap.py` on the host and uploading the result
+- **Font size** — uses `vga1_16x16` and `vga1_8x8` built-in fonts; custom fonts require running `font2bitmap.py` on the host and uploading the result

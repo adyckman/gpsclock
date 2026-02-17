@@ -126,18 +126,17 @@ Initialization sequence (display, GPS, timezone, brightness, display manager) fo
 
 ## Using with gpsd
 
-The clock outputs raw NMEA sentences on USB. To use it with `gpsd`, a read-only proxy is needed to prevent gpsd's probe commands from disrupting the firmware:
+The clock outputs raw NMEA sentences on USB. To use it with `gpsd`, the `-b` (read-only) flag is required to prevent gpsd's protocol probe commands from disrupting the firmware:
 
 ```bash
 sudo systemctl stop gpsd.socket gpsd
-sudo socat -u /dev/ttyACM0,raw,echo=0,b9600 PTY,link=/dev/gps,raw,mode=666 &
-sudo gpsd /dev/gps -n
+sudo gpsd -b -n /dev/ttyACM0
 cgps
 ```
 
-This creates a one-way PTY via `socat` so gpsd can read NMEA data without writing to the ESP32. The device path may vary (`ttyACM0`, `ttyACM1`) — check `ls /dev/ttyACM*`.
+The device path may vary (`ttyACM0`, `ttyACM1`) — check `ls /dev/ttyACM*`.
 
 ## Known Limitations
 
 - **Timezone resets on reboot** — defaults to Eastern, not persisted
-- **gpsd requires socat proxy** — direct connection freezes the firmware due to gpsd's protocol probing
+- **gpsd requires `-b` flag** — without it, gpsd's protocol probing freezes the firmware

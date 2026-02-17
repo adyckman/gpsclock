@@ -27,11 +27,16 @@ class GPSReader:
 
     def feed(self):
         """Drain UART buffer, feed characters to the parser, and echo to USB."""
-        while self._uart.any():
-            ch = self._uart.read(1)
-            if ch:
-                sys.stdout.buffer.write(ch)
-                self._gps.update(chr(ch[0]))
+        n = self._uart.any()
+        if n:
+            buf = self._uart.read(n)
+            if buf:
+                for b in buf:
+                    self._gps.update(chr(b))
+                try:
+                    sys.stdout.buffer.write(buf)
+                except:
+                    pass
         if self._gps.valid:
             self._has_ever_had_fix = True
 

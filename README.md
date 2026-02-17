@@ -118,8 +118,21 @@ Initialization sequence (display, GPS, timezone, display manager) followed by th
 3. **Button test:** Create `TimezoneManager`, poll `check_button()`, verify timezone cycles
 4. **Full integration:** Upload all files, power cycle, verify clock after GPS fix
 
+## Using with gpsd
+
+The clock outputs raw NMEA sentences on USB. To use it with `gpsd`, a read-only proxy is needed to prevent gpsd's probe commands from disrupting the firmware:
+
+```bash
+sudo systemctl stop gpsd.socket gpsd
+sudo socat -u /dev/ttyACM0,raw,echo=0,b9600 PTY,link=/dev/gps,raw,mode=666 &
+sudo gpsd /dev/gps -n
+cgps
+```
+
+This creates a one-way PTY via `socat` so gpsd can read NMEA data without writing to the ESP32. The device path may vary (`ttyACM0`, `ttyACM1`) — check `ls /dev/ttyACM*`.
+
 ## Known Limitations
 
 - **No DST handling** — offsets are standard time only
 - **Timezone resets on reboot** — defaults to Eastern, not persisted
-- **NMEA output mixes with REPL** — USB NMEA passthrough shares `sys.stdout` with the MicroPython REPL
+- **gpsd requires socat proxy** — direct connection freezes the firmware due to gpsd's protocol probing

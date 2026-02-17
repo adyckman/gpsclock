@@ -6,6 +6,7 @@ MicroPython firmware for the **LILYGO T-Display-S3** (ESP32-S3, ST7789 170x320 L
 
 - 24-hour GPS-synchronized clock with local time and UTC time
 - Date, satellite count, fix status, coordinates, and Maidenhead grid locator
+- Raw NMEA passthrough to USB — connected devices can use the clock as a GPS source
 - Button cycles through 6 US timezones (Eastern, Central, Mountain, Pacific, Alaska, Hawaii)
 - Partial-update rendering — only redraws changed regions to minimize flicker
 - Color-coded display: green/red fix status, yellow date, cyan timezone, orange warnings
@@ -18,15 +19,17 @@ MicroPython firmware for the **LILYGO T-Display-S3** (ESP32-S3, ST7789 170x320 L
 +------------------------------------------------------------------+
 |  ZONE A: Time                                                    |
 |                                                                  |
-|              14:34:56 EST      (white 16x16 + cyan 8x8)         |
-|              UTC 19:34:56      (gray 8x8)                        |
+|              14:34:56 EST      (white + cyan)                    |
+|              UTC 19:34:56      (gray)                            |
 +==================================================================+
-|  ZONE B: GPS Info (8x8 font)                                    |
+|  ZONE B: GPS Info                                                |
 |                                                                  |
 |  2026-02-10       Sat:8/12       Fix:3D                         |
 |  40.7128 N        74.0060 W      FN20ir                         |
 +------------------------------------------------------------------+
 ```
+
+All text uses the **fixed_v01** bitmap font (6x9px).
 
 ## Hardware
 
@@ -34,7 +37,7 @@ MicroPython firmware for the **LILYGO T-Display-S3** (ESP32-S3, ST7789 170x320 L
 
 - [LILYGO T-Display-S3](http://www.lilygo.cc/products/t-display-s3) (ESP32-S3 with ST7789 170x320 LCD)
 - [BN-220 GPS module](https://www.u-blox.com/) (9600 baud, NMEA output)
-- Custom MicroPython firmware from [russhughes/st7789s3_mpy](https://github.com/russhughes/st7789s3_mpy) (includes the `st7789` C driver and built-in bitmap fonts)
+- Custom MicroPython firmware from [russhughes/st7789s3_mpy](https://github.com/russhughes/st7789s3_mpy) (includes the `st7789` C driver)
 
 > **Note:** Standard MicroPython does not include the ST7789 parallel driver. You must flash the custom firmware first.
 
@@ -55,10 +58,13 @@ The timezone button uses the onboard button connected to **GPIO14**.
 src/
   main.py              # Entry point, main loop
   tft_config.py        # Display hardware init (parallel 8-bit pins)
-  gps_reader.py        # UART GPS + micropyGPS wrapper
+  gps_reader.py        # UART GPS + micropyGPS wrapper, NMEA USB passthrough
   display_manager.py   # Screen layout and partial-update rendering
   timezone.py          # US timezone definitions + button handler
   micropyGPS.py        # Vendored from inmcm/micropyGPS
+  fixed_v01_8.py       # Bitmap font module (fixed_v01 at size 8)
+utils/
+  font2bitmap.py       # TTF-to-bitmap font converter (host-side tool)
 ```
 
 ## Installation
@@ -90,9 +96,10 @@ Wraps UART1 (9600 baud) and the MicropyGPS parser. Provides:
 - Decimal degree coordinates converted from DMS tuples
 - 6-character Maidenhead grid locator
 - Fix tracking (`has_ever_had_fix` for persistent display after signal loss)
+- Raw NMEA passthrough to USB (`sys.stdout.buffer`) for external device consumption
 
 ### `display_manager.py`
-Two-zone screen layout with cached partial updates. Each text region is tracked by key — only redrawn when the value changes. Uses `vga1_16x16` for local time and `vga1_8x8` for UTC time, timezone, and GPS info.
+Two-zone screen layout with cached partial updates. Each text region is tracked by key — only redrawn when the value changes. Uses the `fixed_v01` bitmap font (converted from TTF via `font2bitmap.py`) for all display text.
 
 ### `main.py`
 Initialization sequence (display, GPS, timezone, display manager) followed by the main loop:
@@ -112,4 +119,4 @@ Initialization sequence (display, GPS, timezone, display manager) followed by th
 
 - **No DST handling** — offsets are standard time only
 - **Timezone resets on reboot** — defaults to Eastern, not persisted
-- **Font size** — uses `vga1_16x16` and `vga1_8x8` built-in fonts; custom fonts require running `font2bitmap.py` on the host and uploading the result
+- **NMEA output mixes with REPL** — USB NMEA passthrough shares `sys.stdout` with the MicroPython REPL

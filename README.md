@@ -7,6 +7,7 @@ MicroPython firmware for the **LILYGO T-Display-S3** (ESP32-S3, ST7789 170x320 L
 - 24-hour GPS-synchronized clock with local time and UTC time
 - Date, satellite count, fix status, coordinates, Maidenhead grid locator, and UTM
 - Raw NMEA passthrough to USB — connected devices can use the clock as a GPS source
+- Adjustable backlight brightness via boot button (GPIO0, 5 levels)
 - Button cycles through 6 US timezones (Eastern, Central, Mountain, Pacific, Alaska, Hawaii)
 - Partial-update rendering — only redraws changed regions to minimize flicker
 - Color-coded display: green/red fix status, yellow date, cyan timezone, orange warnings
@@ -51,7 +52,7 @@ Zone A uses the **fixed_v01** font at size 16 (12x18px). Zone B uses size 8 (6x9
 | VCC    | 3.3V         | BN-220 accepts 2.7-5V |
 | GND    | GND          | Common ground         |
 
-The timezone button uses the onboard button connected to **GPIO14**.
+The timezone button uses the onboard button connected to **GPIO14**. The boot button on **GPIO0** controls backlight brightness.
 
 ## File Structure
 
@@ -61,6 +62,7 @@ src/
   tft_config.py        # Display hardware init (parallel 8-bit pins)
   gps_reader.py        # UART GPS + micropyGPS wrapper, NMEA USB passthrough
   display_manager.py   # Screen layout and partial-update rendering
+  brightness.py        # Backlight PWM control + boot button handler
   timezone.py          # US timezone definitions + button handler
   micropyGPS.py        # Vendored from inmcm/micropyGPS
   fixed_v01_8.py       # Bitmap font module (fixed_v01 at size 8, Zone B)
@@ -84,7 +86,7 @@ utils/
 ## Module Overview
 
 ### `tft_config.py`
-Display hardware configuration from the st7789s3_mpy reference. Sets CPU to 240MHz, enables LCD power (GPIO15), configures 8-bit parallel data pins and control pins.
+Display hardware configuration from the st7789s3_mpy reference. Sets CPU to 240MHz, enables LCD power (GPIO15), configures 8-bit parallel data pins and control pins. Backlight pin (GPIO38) is managed separately by `brightness.py` via PWM.
 
 ### `micropyGPS.py`
 Vendored single-file NMEA parser from [inmcm/micropyGPS](https://github.com/inmcm/micropyGPS). Parses GPRMC, GPGGA, GPGSA, GPGSV, GPGLL, and GPVTG sentences with GP/GL/GN prefix support.
@@ -104,10 +106,13 @@ Wraps UART1 (9600 baud) and the MicropyGPS parser. Provides:
 ### `display_manager.py`
 Two-zone screen layout with cached partial updates. Each text region is tracked by key — only redrawn when the value changes. Zone A (date + time) uses `fixed_v01` at size 16, Zone B (GPS info) uses size 8.
 
+### `brightness.py`
+PWM backlight control on GPIO38 (1kHz). Boot button (GPIO0) with pull-up and 250ms debounce cycles through 5 brightness levels (100%, 75%, 50%, 25%, 6%).
+
 ### `main.py`
-Initialization sequence (display, GPS, timezone, display manager) followed by the main loop:
+Initialization sequence (display, GPS, timezone, brightness, display manager) followed by the main loop:
 - GPS `feed()` every 10ms iteration (drains UART buffer)
-- Button `check_button()` every iteration (responsive feel)
+- Brightness and timezone buttons checked every iteration (responsive feel)
 - Display `update()` throttled to every 200ms
 - Top-level exception handler keeps display powered for debugging
 

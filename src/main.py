@@ -22,6 +22,10 @@ def main():
     from timezone import TimezoneManager
     tz = TimezoneManager()
 
+    # --- Init brightness ---
+    from brightness import BrightnessController
+    bl = BrightnessController()
+
     # --- Init display manager ---
     from display_manager import DisplayManager
     dm = DisplayManager(tft)
@@ -34,7 +38,8 @@ def main():
         # Drain UART buffer every iteration
         gps.feed()
 
-        # Check button every iteration for responsive feel
+        # Check buttons every iteration for responsive feel
+        bl.check_button()
         if tz.check_button():
             # Force immediate display refresh on timezone change
             dm.update(gps, tz)

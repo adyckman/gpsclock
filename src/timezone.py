@@ -65,6 +65,8 @@ class TimezoneManager:
         self._button = Pin(button_pin, Pin.IN, Pin.PULL_UP)
         self._last_press = 0
         self._dst_active = False
+        self._manually_set = False
+        self._auto_detected = False
 
     def check_button(self):
         """Poll button; returns True if timezone was changed."""
@@ -73,7 +75,27 @@ class TimezoneManager:
             if time.ticks_diff(now, self._last_press) > _DEBOUNCE_MS:
                 self._last_press = now
                 self._index = (self._index + 1) % len(_ZONES)
+                self._manually_set = True
                 return True
+        return False
+
+    def set_from_location(self, lat, lon):
+        """Auto-detect timezone from GPS coordinates (first fix only).
+
+        Skips if the user has already pressed the timezone button or
+        auto-detection has already run.
+        """
+        if self._manually_set or self._auto_detected:
+            return False
+        try:
+            from tz_grid import lookup
+            idx = lookup(lat, lon)
+            if 0 <= idx < len(_ZONES):
+                self._index = idx
+                self._auto_detected = True
+                return True
+        except Exception:
+            pass
         return False
 
     def update_dst(self, utc_year, utc_month, utc_day, utc_hour):

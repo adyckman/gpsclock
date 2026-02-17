@@ -33,10 +33,17 @@ def main():
 
     # --- Main loop ---
     last_display = time.ticks_ms()
+    auto_tz_done = False
 
     while True:
         # Drain UART buffer every iteration
         gps.feed()
+
+        # Auto-detect timezone on first GPS fix
+        if not auto_tz_done and gps.has_fix:
+            if tz.set_from_location(gps.latitude_decimal, gps.longitude_decimal):
+                dm.update(gps, tz)
+            auto_tz_done = True
 
         # Check buttons every iteration for responsive feel
         bl.check_button()

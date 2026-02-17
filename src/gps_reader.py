@@ -3,7 +3,7 @@
 import sys
 from machine import UART, Pin
 from micropyGPS import MicropyGPS
-from math import floor
+import math
 
 # Days per month (non-leap / leap year index 1 for Feb)
 _DAYS_IN_MONTH = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
@@ -143,16 +143,16 @@ class GPSReader:
         return dec
 
     def lat_str(self):
-        """Formatted latitude string like '40.7128 N'."""
+        """Formatted latitude string like '40.712800 N'."""
         lat = self._gps._latitude
         dec = lat[0] + lat[1] / 60.0
-        return "{:.4f} {}".format(dec, lat[2])
+        return "{:.6f} {}".format(dec, lat[2])
 
     def lon_str(self):
-        """Formatted longitude string like '74.0060 W'."""
+        """Formatted longitude string like '74.006000 W'."""
         lon = self._gps._longitude
         dec = lon[0] + lon[1] / 60.0
-        return "{:.4f} {}".format(dec, lon[2])
+        return "{:.6f} {}".format(dec, lon[2])
 
     # --- Maidenhead grid locator ---
 
@@ -182,3 +182,61 @@ class GPSReader:
             chr(97 + lon_sub),
             chr(97 + lat_sub),
         )
+
+    # --- UTM coordinates ---
+
+    @property
+    def utm(self):
+        """Compute UTM coordinates from current position (WGS84)."""
+        if not self._has_ever_had_fix:
+            return "-- --E --N"
+
+        lat = self.latitude_decimal
+        lon = self.longitude_decimal
+
+        a = 6378137.0
+        f = 1.0 / 298.257223563
+        e2 = 2 * f - f * f
+        ep2 = e2 / (1 - e2)
+        k0 = 0.9996
+
+        zone = int((lon + 180) / 6) + 1
+        lon0 = (zone - 1) * 6 - 180 + 3
+
+        lat_r = lat * math.pi / 180
+        dlon = (lon - lon0) * math.pi / 180
+
+        sin_lat = math.sin(lat_r)
+        cos_lat = math.cos(lat_r)
+        tan_lat = math.tan(lat_r)
+
+        N = a / math.sqrt(1 - e2 * sin_lat * sin_lat)
+        T = tan_lat * tan_lat
+        C = ep2 * cos_lat * cos_lat
+        A = cos_lat * dlon
+
+        M = a * ((1 - e2 / 4 - 3 * e2 * e2 / 64) * lat_r
+                 - (3 * e2 / 8 + 3 * e2 * e2 / 32) * math.sin(2 * lat_r)
+                 + (15 * e2 * e2 / 256) * math.sin(4 * lat_r))
+
+        A2 = A * A
+        A3 = A2 * A
+        A4 = A3 * A
+        A5 = A4 * A
+        A6 = A5 * A
+
+        easting = k0 * N * (A + (1 - T + C) * A3 / 6
+                             + (5 - 18 * T + T * T + 72 * C - 58 * ep2) * A5 / 120) + 500000
+        northing = k0 * (M + N * tan_lat * (A2 / 2
+                         + (5 - T + 9 * C + 4 * C * C) * A4 / 24
+                         + (61 - 58 * T + T * T + 600 * C - 330 * ep2) * A6 / 720))
+        if lat < 0:
+            northing += 10000000
+
+        bands = 'CDEFGHJKLMNPQRSTUVWX'
+        if -80 <= lat <= 84:
+            band = bands[int((lat + 80) / 8)]
+        else:
+            band = 'X' if lat > 84 else 'C'
+
+        return "{:d}{} {:06d}E {:07d}N".format(zone, band, int(easting), int(northing))

@@ -29,22 +29,23 @@ CHAR_W_BIG = 12    # fixed_v01_16: 12px wide, 18px tall
 CHAR_W_SMALL = 6   # fixed_v01_8: 6px wide, 9px tall
 
 # Zone A: time lines (big font)
-TIME_X = 20                                  # "HH:MM:SS"
+DATE_X = 20                                     # "YYYY-MM-DD" first
 LINE1_Y = 24
-LINE2_Y = 46                                # 24 + 18 + 4
-LABEL_X = TIME_X + 8 * CHAR_W_BIG + 8       # TZ / "UTC" after time
-DATE_X = SCREEN_W - 10 * CHAR_W_BIG - 20    # "YYYY-MM-DD" right-aligned
+LINE2_Y = 46                                   # 24 + 18 + 4
+TIME_X = DATE_X + 10 * CHAR_W_BIG + 8          # "HH:MM:SS" after date
+LABEL_X = TIME_X + 8 * CHAR_W_BIG + 8          # TZ / "UTC" after time
 
 # Separator
 SEP_Y = 68
 
 # Zone B: GPS info rows (small font)
-ROW1_Y = 80
-ROW2_Y = 96
+ROW1_Y = 78
+ROW2_Y = 94
+ROW3_Y = 110
 
 # Status message area
 STATUS_X = 8
-STATUS_Y = 114
+STATUS_Y = 128
 STATUS_CLEAR_W = 180
 
 
@@ -98,21 +99,21 @@ class DisplayManager:
         local_date = gps.date_str(tz.offset)
         utc_date = gps.date_str(0)
 
-        # Line 1: local time + TZ + date
+        # Line 1: date + local time + TZ
+        self._draw_text("local_date", local_date, DATE_X, LINE1_Y,
+                         font_big, date_color, clear_width=126)
         self._draw_text("time", local_time, TIME_X, LINE1_Y,
                          font_big, time_color, clear_width=102)
         self._draw_text("tz", tz.abbreviation, LABEL_X, LINE1_Y,
                          font_big, CYAN, clear_width=54)
-        self._draw_text("local_date", local_date, DATE_X, LINE1_Y,
-                         font_big, date_color, clear_width=126)
 
-        # Line 2: UTC time + "UTC" + date
+        # Line 2: date + UTC time + "UTC"
+        self._draw_text("utc_date", utc_date, DATE_X, LINE2_Y,
+                         font_big, utc_date_color, clear_width=126)
         self._draw_text("utc_time", utc_time, TIME_X, LINE2_Y,
                          font_big, utc_color, clear_width=102)
         self._draw_text("utc_label", "UTC", LABEL_X, LINE2_Y,
                          font_big, CYAN, clear_width=54)
-        self._draw_text("utc_date", utc_date, DATE_X, LINE2_Y,
-                         font_big, utc_date_color, clear_width=126)
 
     def _update_gps_info(self, gps, tz):
         """Draw GPS info in Zone B: satellites, fix, coords, grid."""
@@ -120,7 +121,7 @@ class DisplayManager:
             self._draw_text("status", "Acquiring satellites...",
                              STATUS_X, STATUS_Y, font_small, ORANGE,
                              clear_width=STATUS_CLEAR_W)
-            for key in ("sats", "fix", "lat", "lon", "grid"):
+            for key in ("sats", "fix", "lat", "lon", "grid", "utm"):
                 self._cache[key] = ("", BLACK)
             return
 
@@ -143,19 +144,25 @@ class DisplayManager:
             lat_text = gps.lat_str()
             lon_text = gps.lon_str()
             grid_text = gps.maidenhead
+            utm_text = gps.utm
             coord_color = WHITE
         else:
             lat_text = "-- N"
             lon_text = "-- W"
             grid_text = "------"
+            utm_text = "-- --E --N"
             coord_color = GRAY
 
         self._draw_text("lat", lat_text, 8, ROW2_Y,
-                         font_small, coord_color, clear_width=66)
-        self._draw_text("lon", lon_text, 96, ROW2_Y,
-                         font_small, coord_color, clear_width=66)
-        self._draw_text("grid", grid_text, 184, ROW2_Y,
+                         font_small, coord_color, clear_width=72)
+        self._draw_text("lon", lon_text, 84, ROW2_Y,
+                         font_small, coord_color, clear_width=78)
+        self._draw_text("grid", grid_text, 168, ROW2_Y,
                          font_small, CYAN, clear_width=42)
+
+        # Row 3: UTM
+        self._draw_text("utm", utm_text, 8, ROW3_Y,
+                         font_small, coord_color, clear_width=130)
 
         # Signal lost warning
         if not gps.has_fix:

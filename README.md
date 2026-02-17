@@ -5,7 +5,7 @@ MicroPython firmware for the **LILYGO T-Display-S3** (ESP32-S3, ST7789 170x320 L
 ## Features
 
 - 24-hour GPS-synchronized clock with local time and UTC time
-- Date, satellite count, fix status, coordinates, and Maidenhead grid locator
+- Date, satellite count, fix status, coordinates, Maidenhead grid locator, and UTM
 - Raw NMEA passthrough to USB — connected devices can use the clock as a GPS source
 - Button cycles through 6 US timezones (Eastern, Central, Mountain, Pacific, Alaska, Hawaii)
 - Partial-update rendering — only redraws changed regions to minimize flicker
@@ -17,19 +17,20 @@ MicroPython firmware for the **LILYGO T-Display-S3** (ESP32-S3, ST7789 170x320 L
 
 ```
 +------------------------------------------------------------------+
-|  ZONE A: Time                                                    |
+|  ZONE A: Date + Time (12x18 font)                                |
 |                                                                  |
-|              14:34:56 EST      (white + cyan)                    |
-|              UTC 19:34:56      (gray)                            |
+|  2026-02-10  14:34:56  EST     (yellow / white / cyan)           |
+|  2026-02-10  19:34:56  UTC     (gray / gray / cyan)              |
 +==================================================================+
-|  ZONE B: GPS Info                                                |
+|  ZONE B: GPS Info (6x9 font)                                    |
 |                                                                  |
-|  2026-02-10       Sat:8/12       Fix:3D                         |
-|  40.7128 N        74.0060 W      FN20ir                         |
+|  Sat:8/12  Fix:3D                                                |
+|  40.712800 N  74.006000 W  FN20ir                                |
+|  18T 583960E 4507523N                                            |
 +------------------------------------------------------------------+
 ```
 
-All text uses the **fixed_v01** bitmap font (6x9px).
+Zone A uses the **fixed_v01** font at size 16 (12x18px). Zone B uses size 8 (6x9px).
 
 ## Hardware
 
@@ -62,7 +63,8 @@ src/
   display_manager.py   # Screen layout and partial-update rendering
   timezone.py          # US timezone definitions + button handler
   micropyGPS.py        # Vendored from inmcm/micropyGPS
-  fixed_v01_8.py       # Bitmap font module (fixed_v01 at size 8)
+  fixed_v01_8.py       # Bitmap font module (fixed_v01 at size 8, Zone B)
+  fixed_v01_16.py      # Bitmap font module (fixed_v01 at size 16, Zone A)
 utils/
   font2bitmap.py       # TTF-to-bitmap font converter (host-side tool)
 ```
@@ -93,13 +95,14 @@ Defines 6 US timezones with standard time UTC offsets. GPIO14 button with pull-u
 ### `gps_reader.py`
 Wraps UART1 (9600 baud) and the MicropyGPS parser. Provides:
 - Time/date strings adjusted for timezone offset (handles UTC midnight crossing)
-- Decimal degree coordinates converted from DMS tuples
+- Decimal degree coordinates (6 decimal places) converted from DMS tuples
 - 6-character Maidenhead grid locator
+- UTM coordinates (WGS84 Transverse Mercator)
 - Fix tracking (`has_ever_had_fix` for persistent display after signal loss)
 - Raw NMEA passthrough to USB (`sys.stdout.buffer`) for external device consumption
 
 ### `display_manager.py`
-Two-zone screen layout with cached partial updates. Each text region is tracked by key — only redrawn when the value changes. Uses the `fixed_v01` bitmap font (converted from TTF via `font2bitmap.py`) for all display text.
+Two-zone screen layout with cached partial updates. Each text region is tracked by key — only redrawn when the value changes. Zone A (date + time) uses `fixed_v01` at size 16, Zone B (GPS info) uses size 8.
 
 ### `main.py`
 Initialization sequence (display, GPS, timezone, display manager) followed by the main loop:

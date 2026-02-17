@@ -15,6 +15,7 @@ _ZONES = (
 )
 
 _DEBOUNCE_MS = 250
+_LONG_PRESS_MS = 1000
 
 
 def _day_of_week(year, month, day):
@@ -63,29 +64,43 @@ class TimezoneManager:
     def __init__(self, button_pin=14):
         self._index = 0
         self._button = Pin(button_pin, Pin.IN, Pin.PULL_UP)
-        self._last_press = 0
+        self._last_release = 0
         self._dst_active = False
         self._manually_set = False
         self._auto_detected = False
+        self._button_down = False
+        self._press_start = 0
 
     def check_button(self):
-        """Poll button; returns True if timezone was changed."""
-        if self._button.value() == 0:
-            now = time.ticks_ms()
-            if time.ticks_diff(now, self._last_press) > _DEBOUNCE_MS:
-                self._last_press = now
-                self._index = (self._index + 1) % len(_ZONES)
-                self._manually_set = True
-                return True
-        return False
+        """Poll button; returns 0 (no action), 1 (short press), or 2 (long press)."""
+        pressed = self._button.value() == 0
+        now = time.ticks_ms()
 
-    def set_from_location(self, lat, lon):
-        """Auto-detect timezone from GPS coordinates (first fix only).
+        if pressed and not self._button_down:
+            # Button just pressed — ignore if too soon after last release (bounce)
+            if time.ticks_diff(now, self._last_release) > _DEBOUNCE_MS:
+                self._button_down = True
+                self._press_start = now
+        elif not pressed and self._button_down:
+            # Button just released
+            self._button_down = False
+            self._last_release = now
+            duration = time.ticks_diff(now, self._press_start)
+            if duration >= _LONG_PRESS_MS:
+                return 2
+            self._index = (self._index + 1) % len(_ZONES)
+            self._manually_set = True
+            return 1
+
+        return 0
+
+    def set_from_location(self, lat, lon, force=False):
+        """Auto-detect timezone from GPS coordinates.
 
         Skips if the user has already pressed the timezone button or
-        auto-detection has already run.
+        auto-detection has already run, unless force=True (long press).
         """
-        if self._manually_set or self._auto_detected:
+        if not force and (self._manually_set or self._auto_detected):
             return False
         try:
             from tz_grid import lookup

@@ -47,8 +47,14 @@ def main():
 
         # Check buttons every iteration for responsive feel
         bl.check_button()
-        if tz.check_button():
-            # Force immediate display refresh on timezone change
+        tz_action = tz.check_button()
+        if tz_action == 2 and gps.has_fix:
+            # Long press — re-detect timezone from GPS location
+            tz.set_from_location(gps.latitude_decimal, gps.longitude_decimal, force=True)
+            dm.update(gps, tz)
+            last_display = time.ticks_ms()
+        elif tz_action == 1:
+            # Short press — cycle to next timezone
             dm.update(gps, tz)
             last_display = time.ticks_ms()
 

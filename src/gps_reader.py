@@ -97,6 +97,18 @@ class GPSReader:
 
     # --- Date ---
 
+    @property
+    def utc_year(self):
+        return 2000 + self._gps.date[2]
+
+    @property
+    def utc_month(self):
+        return self._gps.date[1]
+
+    @property
+    def utc_day(self):
+        return self._gps.date[0]
+
     def date_str(self, tz_offset=0):
         """Return YYYY-MM-DD adjusted for timezone offset (handles midnight crossing)."""
         d, m, y = self._gps.date  # (day, month, 2-digit year)

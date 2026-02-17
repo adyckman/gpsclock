@@ -8,7 +8,8 @@ MicroPython firmware for the **LILYGO T-Display-S3** (ESP32-S3, ST7789 170x320 L
 - Date, satellite count, fix status, coordinates, Maidenhead grid locator, and UTM
 - Raw NMEA passthrough to USB — connected devices can use the clock as a GPS source
 - Adjustable backlight brightness via boot button (GPIO0, 5 levels)
-- Button cycles through 6 US timezones (Eastern, Central, Mountain, Pacific, Alaska, Hawaii)
+- Automatic US daylight saving time (spring forward / fall back)
+- Button cycles through 7 US timezones (Eastern, Central, Mountain, Arizona, Pacific, Alaska, Hawaii)
 - Partial-update rendering — only redraws changed regions to minimize flicker
 - Color-coded display: green/red fix status, yellow date, cyan timezone, orange warnings
 - Persistent time display after momentary GPS signal loss
@@ -92,7 +93,7 @@ Display hardware configuration from the st7789s3_mpy reference. Sets CPU to 240M
 Vendored single-file NMEA parser from [inmcm/micropyGPS](https://github.com/inmcm/micropyGPS). Parses GPRMC, GPGGA, GPGSA, GPGSV, GPGLL, and GPVTG sentences with GP/GL/GN prefix support.
 
 ### `timezone.py`
-Defines 6 US timezones with standard time UTC offsets. GPIO14 button with pull-up and 250ms debounce cycles through zones on each press.
+Defines 7 US timezones with automatic DST support. Computes DST transitions (2nd Sunday of March, 1st Sunday of November) from the GPS date and adjusts offset and abbreviation accordingly. Arizona and Hawaii are marked as non-DST. GPIO14 button with pull-up and 250ms debounce cycles through zones on each press.
 
 ### `gps_reader.py`
 Wraps UART1 (9600 baud) and the MicropyGPS parser. Provides:
@@ -138,6 +139,5 @@ This creates a one-way PTY via `socat` so gpsd can read NMEA data without writin
 
 ## Known Limitations
 
-- **No DST handling** — offsets are standard time only
 - **Timezone resets on reboot** — defaults to Eastern, not persisted
 - **gpsd requires socat proxy** — direct connection freezes the firmware due to gpsd's protocol probing

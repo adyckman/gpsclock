@@ -75,6 +75,8 @@ class DisplayManager:
 
     def update(self, gps, tz):
         """Refresh all display regions with current GPS and timezone data."""
+        if gps.time_is_valid:
+            tz.update_dst(gps.utc_year, gps.utc_month, gps.utc_day, gps.hours)
         self._update_time(gps, tz)
         self._update_gps_info(gps, tz)
         self._first_draw = False

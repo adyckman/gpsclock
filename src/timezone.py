@@ -1,19 +1,62 @@
-"""US timezone definitions with button cycling on GPIO14."""
+"""US timezone definitions with DST support and button cycling on GPIO14."""
 
 from machine import Pin
 import time
 
-# US timezone table: (name, abbreviation, UTC offset)
+# US timezone table: (name, std_abbr, std_offset, dst_abbr, dst_offset, observes_dst)
 _ZONES = (
-    ("US Eastern", "EST", -5),
-    ("US Central", "CST", -6),
-    ("US Mountain", "MST", -7),
-    ("US Pacific", "PST", -8),
-    ("Alaska", "AKST", -9),
-    ("Hawaii", "HST", -10),
+    ("US Eastern",  "EST", -5, "EDT", -4, True),
+    ("US Central",  "CST", -6, "CDT", -5, True),
+    ("US Mountain", "MST", -7, "MDT", -6, True),
+    ("Arizona",     "MST", -7, "MST", -7, False),
+    ("US Pacific",  "PST", -8, "PDT", -7, True),
+    ("Alaska",      "AKST", -9, "AKDT", -8, True),
+    ("Hawaii",      "HST", -10, "HST", -10, False),
 )
 
 _DEBOUNCE_MS = 250
+
+
+def _day_of_week(year, month, day):
+    """Return day of week (0=Sunday, 1=Monday, ..., 6=Saturday).
+
+    Uses Tomohiko Sakamoto's algorithm.
+    """
+    t = (0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4)
+    if month < 3:
+        year -= 1
+    return (year + year // 4 - year // 100 + year // 400 + t[month - 1] + day) % 7
+
+
+def _nth_sunday(year, month, n):
+    """Return the day-of-month of the nth Sunday in the given month."""
+    # Find first Sunday
+    dow = _day_of_week(year, month, 1)  # day of week for the 1st
+    first_sunday = 1 + (7 - dow) % 7
+    return first_sunday + 7 * (n - 1)
+
+
+def _is_dst(utc_year, utc_month, utc_day, utc_hour, std_offset):
+    """Determine if DST is active for the given UTC time and standard offset.
+
+    US DST: starts 2nd Sunday of March at 2:00 AM local (= 2-std_offset UTC),
+            ends 1st Sunday of November at 2:00 AM local (= 2-dst_offset UTC).
+    """
+    dst_start_day = _nth_sunday(utc_year, 3, 2)   # 2nd Sunday in March
+    dst_end_day = _nth_sunday(utc_year, 11, 1)     # 1st Sunday in November
+
+    # Transition times in UTC hours
+    # Spring forward: 2:00 AM standard time = (2 - std_offset) UTC
+    spring_utc_hour = 2 - std_offset
+    # Fall back: 2:00 AM daylight time = (2 - (std_offset + 1)) UTC
+    fall_utc_hour = 2 - (std_offset + 1)
+
+    # Encode as comparable value: month * 100000 + day * 1000 + hour
+    now = utc_month * 100000 + utc_day * 1000 + utc_hour
+    start = 3 * 100000 + dst_start_day * 1000 + spring_utc_hour
+    end = 11 * 100000 + dst_end_day * 1000 + fall_utc_hour
+
+    return start <= now < end
 
 
 class TimezoneManager:
@@ -21,6 +64,7 @@ class TimezoneManager:
         self._index = 0
         self._button = Pin(button_pin, Pin.IN, Pin.PULL_UP)
         self._last_press = 0
+        self._dst_active = False
 
     def check_button(self):
         """Poll button; returns True if timezone was changed."""
@@ -32,9 +76,18 @@ class TimezoneManager:
                 return True
         return False
 
+    def update_dst(self, utc_year, utc_month, utc_day, utc_hour):
+        """Update DST state based on current UTC time."""
+        zone = _ZONES[self._index]
+        if zone[5]:  # observes DST
+            self._dst_active = _is_dst(utc_year, utc_month, utc_day, utc_hour, zone[2])
+        else:
+            self._dst_active = False
+
     @property
     def offset(self):
-        return _ZONES[self._index][2]
+        zone = _ZONES[self._index]
+        return zone[4] if self._dst_active else zone[2]
 
     @property
     def name(self):
@@ -42,7 +95,8 @@ class TimezoneManager:
 
     @property
     def abbreviation(self):
-        return _ZONES[self._index][1]
+        zone = _ZONES[self._index]
+        return zone[3] if self._dst_active else zone[1]
 
     @property
     def label(self):

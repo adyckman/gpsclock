@@ -1,5 +1,6 @@
 """UART GPS reader wrapping micropyGPS for the BN-220 module."""
 
+import sys
 from machine import UART, Pin
 from micropyGPS import MicropyGPS
 from math import floor
@@ -25,10 +26,11 @@ class GPSReader:
         self._has_ever_had_fix = False
 
     def feed(self):
-        """Drain UART buffer and feed characters to the parser."""
+        """Drain UART buffer, feed characters to the parser, and echo to USB."""
         while self._uart.any():
             ch = self._uart.read(1)
             if ch:
+                sys.stdout.buffer.write(ch)
                 self._gps.update(chr(ch[0]))
         if self._gps.valid:
             self._has_ever_had_fix = True

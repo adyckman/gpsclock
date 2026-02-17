@@ -2,12 +2,13 @@
 
 320x170 landscape (rotation=1), ST7789 driver with fixed_v01 font.
 
-Zone A (top): Local time + TZ abbreviation, UTC time below
-Zone B (bottom): Date, satellite info, fix status, coordinates, grid square
+Zone A (top): Local time + TZ + date, UTC time + date below
+Zone B (bottom): Satellite info, fix status, coordinates, grid square
 """
 
 import st7789
-import fixed_v01_8 as font
+import fixed_v01_16 as font_big
+import fixed_v01_8 as font_small
 
 # Colors (RGB565)
 WHITE = st7789.color565(255, 255, 255)
@@ -23,23 +24,23 @@ GRAY = st7789.color565(128, 128, 128)
 SCREEN_W = 320
 SCREEN_H = 170
 
-# Character metrics (most chars 6px wide, HEIGHT 9px)
-CHAR_W = 6
+# Character metrics
+CHAR_W_BIG = 12    # fixed_v01_16: 12px wide, 18px tall
+CHAR_W_SMALL = 6   # fixed_v01_8: 6px wide, 9px tall
 
-# Zone A: local time + TZ, then UTC time
-TIME_X = (SCREEN_W - 8 * CHAR_W) // 2   # "HH:MM:SS" centered
-TIME_Y = 37
-TZ_X = TIME_X + 8 * CHAR_W + 4          # abbreviation right of time
-TZ_Y = TIME_Y                           # same line, same font
-UTC_X = (SCREEN_W - 12 * CHAR_W) // 2   # "UTC HH:MM:SS" centered
-UTC_Y = 54
+# Zone A: time lines (big font)
+TIME_X = 20                                  # "HH:MM:SS"
+LINE1_Y = 24
+LINE2_Y = 46                                # 24 + 18 + 4
+LABEL_X = TIME_X + 8 * CHAR_W_BIG + 8       # TZ / "UTC" after time
+DATE_X = SCREEN_W - 10 * CHAR_W_BIG - 20    # "YYYY-MM-DD" right-aligned
 
 # Separator
-SEP_Y = 71
+SEP_Y = 68
 
-# Zone B: GPS info rows (~53 chars per line at 6px)
+# Zone B: GPS info rows (small font)
 ROW1_Y = 80
-ROW2_Y = 97
+ROW2_Y = 96
 
 # Status message area
 STATUS_X = 8
@@ -60,7 +61,7 @@ class DisplayManager:
         self._first_draw = True
         self._cache.clear()
 
-    def _draw_text_if_changed(self, key, text, x, y, color, clear_width=0):
+    def _draw_text(self, key, text, x, y, font, color, clear_width=0):
         """Only redraw text if it has changed since last call with this key."""
         prev = self._cache.get(key)
         if prev == (text, color) and not self._first_draw:
@@ -78,53 +79,64 @@ class DisplayManager:
         self._first_draw = False
 
     def _update_time(self, gps, tz):
-        """Draw local time, TZ abbreviation, and UTC time."""
+        """Draw local time + TZ + date, and UTC time + date."""
         if gps.time_is_valid:
-            local_text = gps.time_str(tz.offset)
-            utc_text = "UTC " + gps.time_str(0)
+            local_time = gps.time_str(tz.offset)
+            utc_time = gps.time_str(0)
             time_color = WHITE
             utc_color = GRAY
+            date_color = YELLOW
+            utc_date_color = GRAY
         else:
-            local_text = "--:--:--"
-            utc_text = "UTC --:--:--"
+            local_time = "--:--:--"
+            utc_time = "--:--:--"
             time_color = GRAY
             utc_color = GRAY
+            date_color = GRAY
+            utc_date_color = GRAY
 
-        self._draw_text_if_changed(
-            "time", local_text, TIME_X, TIME_Y, time_color, clear_width=54)
-        self._draw_text_if_changed(
-            "tz", tz.abbreviation, TZ_X, TZ_Y, CYAN, clear_width=30)
-        self._draw_text_if_changed(
-            "utc", utc_text, UTC_X, UTC_Y, utc_color, clear_width=78)
+        local_date = gps.date_str(tz.offset)
+        utc_date = gps.date_str(0)
+
+        # Line 1: local time + TZ + date
+        self._draw_text("time", local_time, TIME_X, LINE1_Y,
+                         font_big, time_color, clear_width=102)
+        self._draw_text("tz", tz.abbreviation, LABEL_X, LINE1_Y,
+                         font_big, CYAN, clear_width=54)
+        self._draw_text("local_date", local_date, DATE_X, LINE1_Y,
+                         font_big, date_color, clear_width=126)
+
+        # Line 2: UTC time + "UTC" + date
+        self._draw_text("utc_time", utc_time, TIME_X, LINE2_Y,
+                         font_big, utc_color, clear_width=102)
+        self._draw_text("utc_label", "UTC", LABEL_X, LINE2_Y,
+                         font_big, CYAN, clear_width=54)
+        self._draw_text("utc_date", utc_date, DATE_X, LINE2_Y,
+                         font_big, utc_date_color, clear_width=126)
 
     def _update_gps_info(self, gps, tz):
-        """Draw GPS info in Zone B: date, satellites, fix, coords, grid."""
+        """Draw GPS info in Zone B: satellites, fix, coords, grid."""
         if not gps.has_ever_had_fix:
-            self._draw_text_if_changed(
-                "status", "Acquiring satellites...",
-                STATUS_X, STATUS_Y, ORANGE, clear_width=STATUS_CLEAR_W)
-            # Clear data rows
-            for key in ("date", "sats", "fix", "lat", "lon", "grid"):
+            self._draw_text("status", "Acquiring satellites...",
+                             STATUS_X, STATUS_Y, font_small, ORANGE,
+                             clear_width=STATUS_CLEAR_W)
+            for key in ("sats", "fix", "lat", "lon", "grid"):
                 self._cache[key] = ("", BLACK)
             return
 
         # Clear acquiring message when we first get a fix
-        self._draw_text_if_changed(
-            "status", "", STATUS_X, STATUS_Y, BLACK, clear_width=STATUS_CLEAR_W)
+        self._draw_text("status", "", STATUS_X, STATUS_Y,
+                         font_small, BLACK, clear_width=STATUS_CLEAR_W)
 
-        # Row 1: Date | Sat:U/V | Fix:type
-        date_text = gps.date_str(tz.offset)
-        self._draw_text_if_changed(
-            "date", date_text, 8, ROW1_Y, YELLOW, clear_width=66)
-
+        # Row 1: Sat:U/V | Fix:type
         sat_text = "Sat:{}/{}".format(gps.satellites_in_use, gps.satellites_in_view)
-        self._draw_text_if_changed(
-            "sats", sat_text, 96, ROW1_Y, WHITE, clear_width=60)
+        self._draw_text("sats", sat_text, 8, ROW1_Y,
+                         font_small, WHITE, clear_width=60)
 
         fix_text = "Fix:{}".format(gps.fix_type_str)
         fix_color = GREEN if gps.has_fix else RED
-        self._draw_text_if_changed(
-            "fix", fix_text, 178, ROW1_Y, fix_color, clear_width=48)
+        self._draw_text("fix", fix_text, 96, ROW1_Y,
+                         font_small, fix_color, clear_width=48)
 
         # Row 2: Lat | Lon | Grid
         if gps.has_fix:
@@ -138,15 +150,15 @@ class DisplayManager:
             grid_text = "------"
             coord_color = GRAY
 
-        self._draw_text_if_changed(
-            "lat", lat_text, 8, ROW2_Y, coord_color, clear_width=66)
-        self._draw_text_if_changed(
-            "lon", lon_text, 96, ROW2_Y, coord_color, clear_width=66)
-        self._draw_text_if_changed(
-            "grid", grid_text, 184, ROW2_Y, CYAN, clear_width=42)
+        self._draw_text("lat", lat_text, 8, ROW2_Y,
+                         font_small, coord_color, clear_width=66)
+        self._draw_text("lon", lon_text, 96, ROW2_Y,
+                         font_small, coord_color, clear_width=66)
+        self._draw_text("grid", grid_text, 184, ROW2_Y,
+                         font_small, CYAN, clear_width=42)
 
         # Signal lost warning
         if not gps.has_fix:
-            self._draw_text_if_changed(
-                "status", "Signal lost",
-                STATUS_X, STATUS_Y, RED, clear_width=STATUS_CLEAR_W)
+            self._draw_text("status", "Signal lost",
+                             STATUS_X, STATUS_Y, font_small, RED,
+                             clear_width=STATUS_CLEAR_W)

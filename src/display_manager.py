@@ -42,10 +42,11 @@ SEP_Y = 68
 ROW1_Y = 78
 ROW2_Y = 94
 ROW3_Y = 110
+ROW4_Y = 126
 
 # Status message area
 STATUS_X = 8
-STATUS_Y = 128
+STATUS_Y = 142
 STATUS_CLEAR_W = 180
 
 
@@ -73,12 +74,14 @@ class DisplayManager:
         if text:
             self._tft.write(font, text, x, y, color, BLACK)
 
-    def update(self, gps, tz):
+    def update(self, gps, tz, dht=None):
         """Refresh all display regions with current GPS and timezone data."""
         if gps.time_is_valid:
             tz.update_dst(gps.utc_year, gps.utc_month, gps.utc_day, gps.hours)
         self._update_time(gps, tz)
         self._update_gps_info(gps, tz)
+        if dht is not None:
+            self._update_dht(dht)
         self._first_draw = False
 
     def _update_time(self, gps, tz):
@@ -171,3 +174,18 @@ class DisplayManager:
             self._draw_text("status", "Signal lost",
                              STATUS_X, STATUS_Y, font_small, RED,
                              clear_width=STATUS_CLEAR_W)
+
+    def _update_dht(self, dht):
+        """Draw temperature and humidity on ROW4."""
+        if dht.has_reading:
+            temp_text = "{:.1f}F".format(dht.temperature_f)
+            hum_text = "{:.1f}%".format(dht.humidity)
+            color = WHITE
+        else:
+            temp_text = "--.-F"
+            hum_text = "--.-%"
+            color = GRAY
+        self._draw_text("temp", temp_text, 8, ROW4_Y,
+                         font_small, color, clear_width=42)
+        self._draw_text("hum", hum_text, 60, ROW4_Y,
+                         font_small, color, clear_width=36)

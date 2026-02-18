@@ -15,6 +15,7 @@ MicroPython firmware for the **LILYGO T-Display-S3** (ESP32-S3, ST7789 170x320 L
 - Color-coded display: green/red fix status, yellow date, cyan timezone, orange warnings
 - Persistent time display after momentary GPS signal loss
 - Timezone-aware date handling (correct midnight crossing)
+- DHT22 temperature (°F) and humidity display
 
 ## Display Layout
 
@@ -30,6 +31,7 @@ MicroPython firmware for the **LILYGO T-Display-S3** (ESP32-S3, ST7789 170x320 L
 |  Sat:8/12  Fix:3D                                                |
 |  40.712800 N  74.006000 W  FN20ir                                |
 |  18T 583960E 4507523N                                            |
+|  72.4F  45.2%                                                    |
 +------------------------------------------------------------------+
 ```
 
@@ -41,6 +43,7 @@ Zone A uses the **fixed_v01** font at size 16 (12x18px). Zone B uses size 8 (6x9
 
 - [LILYGO T-Display-S3](http://www.lilygo.cc/products/t-display-s3) (ESP32-S3 with ST7789 170x320 LCD)
 - [BN-220 GPS module](https://www.u-blox.com/) (9600 baud, NMEA output)
+- DHT22 temperature/humidity sensor on GPIO16
 - Custom MicroPython firmware from [russhughes/st7789s3_mpy](https://github.com/russhughes/st7789s3_mpy) (includes the `st7789` C driver)
 
 > **Note:** Standard MicroPython does not include the ST7789 parallel driver. You must flash the custom firmware first.
@@ -54,6 +57,12 @@ Zone A uses the **fixed_v01** font at size 16 (12x18px). Zone B uses size 8 (6x9
 | VCC    | 3.3V         | BN-220 accepts 2.7-5V |
 | GND    | GND          | Common ground         |
 
+| DHT22    | T-Display-S3 | Note                  |
+|----------|--------------|-----------------------|
+| DATA     | GPIO16       | 10k pull-up to 3.3V   |
+| VCC      | 3.3V         | DHT22 accepts 3.3-5V  |
+| GND      | GND          | Common ground         |
+
 The timezone button uses the onboard button connected to **GPIO14**. The boot button on **GPIO0** controls backlight brightness.
 
 ## File Structure
@@ -64,6 +73,7 @@ src/
   tft_config.py        # Display hardware init (parallel 8-bit pins)
   gps_reader.py        # UART GPS + micropyGPS wrapper, NMEA USB passthrough
   display_manager.py   # Screen layout and partial-update rendering
+  dht_reader.py        # DHT22 temperature/humidity sensor reader
   brightness.py        # Backlight PWM control + boot button handler
   timezone.py          # US timezone definitions + button handler
   tz_grid.py           # Precomputed timezone boundary grid (auto-generated)
@@ -113,11 +123,14 @@ Wraps UART1 (9600 baud) and the MicropyGPS parser. Provides:
 ### `display_manager.py`
 Two-zone screen layout with cached partial updates. Each text region is tracked by key — only redrawn when the value changes. Zone A (date + time) uses `fixed_v01` at size 16, Zone B (GPS info) uses size 8.
 
+### `dht_reader.py`
+Reads a DHT22 sensor on GPIO16 with a 2-second polling interval (the hardware minimum). Keeps the last good reading on sensor errors. Exposes temperature in Fahrenheit and relative humidity percentage.
+
 ### `brightness.py`
 PWM backlight control on GPIO38 (1kHz). Boot button (GPIO0) with pull-up and 250ms debounce cycles through 5 brightness levels (100%, 75%, 50%, 25%, 6%).
 
 ### `main.py`
-Initialization sequence (display, GPS, timezone, brightness, display manager) followed by the main loop:
+Initialization sequence (display, GPS, timezone, brightness, DHT22, display manager) followed by the main loop:
 - GPS `feed()` every 10ms iteration (drains UART buffer)
 - Auto-detect timezone on first GPS fix (one-time)
 - Brightness and timezone buttons checked every iteration (responsive feel)

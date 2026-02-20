@@ -55,6 +55,13 @@ class DisplayManager:
         self._tft = tft
         self._cache = {}
         self._first_draw = True
+        # Raw value caches to skip formatting when unchanged
+        self._last_siu = -1
+        self._last_siv = -1
+        self._last_fix_type = -1
+        self._last_has_fix = None
+        self._last_temp = None
+        self._last_hum = None
 
     def init_screen(self):
         """Clear screen and draw static elements."""
@@ -66,7 +73,7 @@ class DisplayManager:
     def _draw_text(self, key, text, x, y, font, color, clear_width=0):
         """Only redraw text if it has changed since last call with this key."""
         prev = self._cache.get(key)
-        if prev == (text, color) and not self._first_draw:
+        if prev is not None and prev[0] == text and prev[1] == color and not self._first_draw:
             return
         self._cache[key] = (text, color)
         if clear_width > 0:
@@ -135,14 +142,21 @@ class DisplayManager:
                          font_small, BLACK, clear_width=STATUS_CLEAR_W)
 
         # Row 1: Sat:U/V | Fix:type
-        sat_text = "Sat:{}/{}".format(gps.satellites_in_use, gps.satellites_in_view)
-        self._draw_text("sats", sat_text, 8, ROW1_Y,
-                         font_small, WHITE, clear_width=60)
+        siu = gps.satellites_in_use
+        siv = gps.satellites_in_view
+        if siu != self._last_siu or siv != self._last_siv or self._first_draw:
+            self._last_siu = siu
+            self._last_siv = siv
+            self._draw_text("sats", "Sat:{}/{}".format(siu, siv), 8, ROW1_Y,
+                             font_small, WHITE, clear_width=60)
 
-        fix_text = "Fix:{}".format(gps.fix_type_str)
-        fix_color = GREEN if gps.has_fix else RED
-        self._draw_text("fix", fix_text, 96, ROW1_Y,
-                         font_small, fix_color, clear_width=48)
+        ft = gps.fix_type_str
+        hf = gps.has_fix
+        if ft != self._last_fix_type or hf != self._last_has_fix or self._first_draw:
+            self._last_fix_type = ft
+            self._last_has_fix = hf
+            self._draw_text("fix", "Fix:{}".format(ft), 96, ROW1_Y,
+                             font_small, GREEN if hf else RED, clear_width=48)
 
         # Row 2: Lat | Lon | Grid
         if gps.has_fix:
@@ -178,14 +192,19 @@ class DisplayManager:
     def _update_dht(self, dht):
         """Draw temperature and humidity on ROW4."""
         if dht.has_reading:
-            temp_text = "{:.1f}F".format(dht.temperature_f)
-            hum_text = "{:.1f}%".format(dht.humidity)
-            color = WHITE
-        else:
-            temp_text = "--.-F"
-            hum_text = "--.-%"
-            color = GRAY
-        self._draw_text("temp", temp_text, 8, ROW4_Y,
-                         font_small, color, clear_width=42)
-        self._draw_text("hum", hum_text, 60, ROW4_Y,
-                         font_small, color, clear_width=36)
+            t = dht.temperature_f
+            h = dht.humidity
+            if t != self._last_temp or h != self._last_hum or self._first_draw:
+                self._last_temp = t
+                self._last_hum = h
+                self._draw_text("temp", "{:.1f}F".format(t), 8, ROW4_Y,
+                                 font_small, WHITE, clear_width=42)
+                self._draw_text("hum", "{:.1f}%".format(h), 60, ROW4_Y,
+                                 font_small, WHITE, clear_width=36)
+        elif self._last_temp is not None or self._first_draw:
+            self._last_temp = None
+            self._last_hum = None
+            self._draw_text("temp", "--.-F", 8, ROW4_Y,
+                             font_small, GRAY, clear_width=42)
+            self._draw_text("hum", "--.-%", 60, ROW4_Y,
+                             font_small, GRAY, clear_width=36)

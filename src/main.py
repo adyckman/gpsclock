@@ -2,6 +2,7 @@
 
 import time
 import sys
+import gc
 
 # Display update throttle (ms)
 _DISPLAY_INTERVAL_MS = 200
@@ -38,6 +39,7 @@ def main():
     # --- Main loop ---
     last_display = time.ticks_ms()
     auto_tz_done = False
+    gc_counter = 0
 
     while True:
         # Drain UART buffer every iteration
@@ -70,6 +72,10 @@ def main():
         if time.ticks_diff(now, last_display) >= _DISPLAY_INTERVAL_MS:
             dm.update(gps, tz, dht)
             last_display = now
+            gc_counter += 1
+            if gc_counter >= 5:
+                gc_counter = 0
+                gc.collect()
 
         time.sleep_ms(10)
 

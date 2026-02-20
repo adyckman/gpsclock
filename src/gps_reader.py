@@ -25,19 +25,35 @@ class GPSReader:
         self._gps = MicropyGPS()
         self._has_ever_had_fix = False
 
+        # Cached decimal coordinates
+        self._lat_mins = None
+        self._lat_dec = 0.0
+        self._lon_mins = None
+        self._lon_dec = 0.0
+
+        # Cached maidenhead
+        self._cached_mh_lat = None
+        self._cached_mh_lon = None
+        self._cached_mh = "------"
+
+        # Cached UTM
+        self._cached_utm_lat = None
+        self._cached_utm_lon = None
+        self._cached_utm = "-- --E --N"
+
     def feed(self):
-        """Drain UART buffer, feed characters to the parser, and echo to USB."""
+        """Drain UART buffer, feed bytes to the parser, and echo to USB."""
         n = self._uart.any()
         if n:
             buf = self._uart.read(n)
             if buf:
                 for b in buf:
-                    self._gps.update(chr(b))
+                    self._gps.update(b)
                 try:
                     sys.stdout.buffer.write(buf)
                 except:
                     pass
-        if self._gps.valid:
+        if not self._has_ever_had_fix and self._gps.valid:
             self._has_ever_had_fix = True
 
     # --- Time ---
@@ -143,55 +159,63 @@ class GPSReader:
 
     @property
     def latitude_decimal(self):
-        """Return latitude in decimal degrees (positive N, negative S)."""
+        """Return latitude in decimal degrees (positive N, negative S). Cached."""
         lat = self._gps._latitude
-        dec = lat[0] + lat[1] / 60.0
-        if lat[2] == 'S':
-            dec = -dec
-        return dec
+        if lat[1] != self._lat_mins:
+            self._lat_mins = lat[1]
+            dec = lat[0] + lat[1] / 60.0
+            if lat[2] == 'S':
+                dec = -dec
+            self._lat_dec = dec
+        return self._lat_dec
 
     @property
     def longitude_decimal(self):
-        """Return longitude in decimal degrees (positive E, negative W)."""
+        """Return longitude in decimal degrees (positive E, negative W). Cached."""
         lon = self._gps._longitude
-        dec = lon[0] + lon[1] / 60.0
-        if lon[2] == 'W':
-            dec = -dec
-        return dec
+        if lon[1] != self._lon_mins:
+            self._lon_mins = lon[1]
+            dec = lon[0] + lon[1] / 60.0
+            if lon[2] == 'W':
+                dec = -dec
+            self._lon_dec = dec
+        return self._lon_dec
 
     def lat_str(self):
         """Formatted latitude string like '40.712800 N'."""
-        lat = self._gps._latitude
-        dec = lat[0] + lat[1] / 60.0
-        return "{:.6f} {}".format(dec, lat[2])
+        return "{:.6f} {}".format(abs(self.latitude_decimal), self._gps._latitude[2])
 
     def lon_str(self):
         """Formatted longitude string like '74.006000 W'."""
-        lon = self._gps._longitude
-        dec = lon[0] + lon[1] / 60.0
-        return "{:.6f} {}".format(dec, lon[2])
+        return "{:.6f} {}".format(abs(self.longitude_decimal), self._gps._longitude[2])
 
     # --- Maidenhead grid locator ---
 
     @property
     def maidenhead(self):
-        """Compute 6-character Maidenhead grid locator from current position."""
+        """Compute 6-character Maidenhead grid locator from current position. Cached."""
         if not self._has_ever_had_fix:
             return "------"
-        lon = self.longitude_decimal + 180.0
-        lat = self.latitude_decimal + 90.0
+
+        lat = self.latitude_decimal
+        lon = self.longitude_decimal
+        if lat == self._cached_mh_lat and lon == self._cached_mh_lon:
+            return self._cached_mh
+
+        lon_adj = lon + 180.0
+        lat_adj = lat + 90.0
 
         # Field (20x10 degrees)
-        lon_field = int(lon / 20)
-        lat_field = int(lat / 10)
+        lon_field = int(lon_adj / 20)
+        lat_field = int(lat_adj / 10)
         # Square (2x1 degrees)
-        lon_sq = int((lon - lon_field * 20) / 2)
-        lat_sq = int(lat - lat_field * 10)
+        lon_sq = int((lon_adj - lon_field * 20) / 2)
+        lat_sq = int(lat_adj - lat_field * 10)
         # Subsquare (5min x 2.5min)
-        lon_sub = int((lon - lon_field * 20 - lon_sq * 2) * 12)
-        lat_sub = int((lat - lat_field * 10 - lat_sq) * 24)
+        lon_sub = int((lon_adj - lon_field * 20 - lon_sq * 2) * 12)
+        lat_sub = int((lat_adj - lat_field * 10 - lat_sq) * 24)
 
-        return "{}{}{}{}{}{}".format(
+        result = "{}{}{}{}{}{}".format(
             chr(65 + lon_field),
             chr(65 + lat_field),
             chr(48 + lon_sq),
@@ -199,17 +223,29 @@ class GPSReader:
             chr(97 + lon_sub),
             chr(97 + lat_sub),
         )
+        self._cached_mh_lat = lat
+        self._cached_mh_lon = lon
+        self._cached_mh = result
+        return result
 
     # --- UTM coordinates ---
 
     @property
     def utm(self):
-        """Compute UTM coordinates from current position (WGS84)."""
+        """Compute UTM coordinates from current position (WGS84). Cached."""
         if not self._has_ever_had_fix:
             return "-- --E --N"
 
         lat = self.latitude_decimal
         lon = self.longitude_decimal
+        if lat == self._cached_utm_lat and lon == self._cached_utm_lon:
+            return self._cached_utm
+
+        _sin = math.sin
+        _cos = math.cos
+        _tan = math.tan
+        _sqrt = math.sqrt
+        _pi = math.pi
 
         a = 6378137.0
         f = 1.0 / 298.257223563
@@ -220,21 +256,21 @@ class GPSReader:
         zone = int((lon + 180) / 6) + 1
         lon0 = (zone - 1) * 6 - 180 + 3
 
-        lat_r = lat * math.pi / 180
-        dlon = (lon - lon0) * math.pi / 180
+        lat_r = lat * _pi / 180
+        dlon = (lon - lon0) * _pi / 180
 
-        sin_lat = math.sin(lat_r)
-        cos_lat = math.cos(lat_r)
-        tan_lat = math.tan(lat_r)
+        sin_lat = _sin(lat_r)
+        cos_lat = _cos(lat_r)
+        tan_lat = _tan(lat_r)
 
-        N = a / math.sqrt(1 - e2 * sin_lat * sin_lat)
+        N = a / _sqrt(1 - e2 * sin_lat * sin_lat)
         T = tan_lat * tan_lat
         C = ep2 * cos_lat * cos_lat
         A = cos_lat * dlon
 
         M = a * ((1 - e2 / 4 - 3 * e2 * e2 / 64) * lat_r
-                 - (3 * e2 / 8 + 3 * e2 * e2 / 32) * math.sin(2 * lat_r)
-                 + (15 * e2 * e2 / 256) * math.sin(4 * lat_r))
+                 - (3 * e2 / 8 + 3 * e2 * e2 / 32) * _sin(2 * lat_r)
+                 + (15 * e2 * e2 / 256) * _sin(4 * lat_r))
 
         A2 = A * A
         A3 = A2 * A
@@ -256,4 +292,8 @@ class GPSReader:
         else:
             band = 'X' if lat > 84 else 'C'
 
-        return "{:d}{} {:06d}E {:07d}N".format(zone, band, int(easting), int(northing))
+        result = "{:d}{} {:06d}E {:07d}N".format(zone, band, int(easting), int(northing))
+        self._cached_utm_lat = lat
+        self._cached_utm_lon = lon
+        self._cached_utm = result
+        return result

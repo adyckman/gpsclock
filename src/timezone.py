@@ -70,6 +70,8 @@ class TimezoneManager:
         self._auto_detected = False
         self._button_down = False
         self._press_start = 0
+        self._last_dst_hour = -1
+        self._last_dst_day = -1
 
     def check_button(self):
         """Poll button; returns 0 (no action), 1 (short press), or 2 (long press)."""
@@ -87,9 +89,11 @@ class TimezoneManager:
             self._last_release = now
             duration = time.ticks_diff(now, self._press_start)
             if duration >= _LONG_PRESS_MS:
+                self._last_dst_hour = -1
                 return 2
             self._index = (self._index + 1) % len(_ZONES)
             self._manually_set = True
+            self._last_dst_hour = -1
             return 1
 
         return 0
@@ -108,13 +112,18 @@ class TimezoneManager:
             if 0 <= idx < len(_ZONES):
                 self._index = idx
                 self._auto_detected = True
+                self._last_dst_hour = -1
                 return True
         except Exception:
             pass
         return False
 
     def update_dst(self, utc_year, utc_month, utc_day, utc_hour):
-        """Update DST state based on current UTC time."""
+        """Update DST state based on current UTC time. Cached until hour/day changes."""
+        if utc_hour == self._last_dst_hour and utc_day == self._last_dst_day:
+            return
+        self._last_dst_hour = utc_hour
+        self._last_dst_day = utc_day
         zone = _ZONES[self._index]
         if zone[5]:  # observes DST
             self._dst_active = _is_dst(utc_year, utc_month, utc_day, utc_hour, zone[2])

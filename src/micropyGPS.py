@@ -17,6 +17,12 @@ class MicropyGPS(object):
     SENTENCE_LIMIT = 90
     __HEMISPHERES = ('N', 'S', 'E', 'W')
 
+    __slots__ = ('sentence_active', 'process_crc', 'gps_segments', 'crc_xor',
+                 'char_count', 'crc_fails', 'clean_sentences', 'parsed_sentences',
+                 'timestamp', 'date', '_latitude', '_longitude',
+                 'satellites_in_view', 'satellites_in_use', 'valid', 'fix_type',
+                 '_buf', '_buf_len', '_crc_buf', '_crc_len')
+
     def __init__(self):
         #####################
         # Object Status Flags

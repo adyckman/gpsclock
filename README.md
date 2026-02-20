@@ -121,10 +121,10 @@ Wraps UART1 (9600 baud) and the MicropyGPS parser. Provides:
 - Raw NMEA passthrough to USB (`sys.stdout.buffer`) for external device consumption
 
 ### `display_manager.py`
-Two-zone screen layout with cached partial updates. Each text region is tracked by key — only redrawn when the value changes. Zone A (date + time) uses `fixed_v01` at size 16, Zone B (GPS info) uses size 8.
+Two-zone screen layout with cached partial updates. Each text region is tracked in a list-based cache indexed by integer constants — only redrawn when the value changes. Raw value caching skips string formatting for unchanged satellite, fix, and DHT fields. Zone A (date + time) uses `fixed_v01` at size 16, Zone B (GPS info) uses size 8.
 
 ### `dht_reader.py`
-Reads a DHT22 sensor on GPIO16 with a 2-second polling interval (the hardware minimum). Keeps the last good reading on sensor errors. Exposes temperature in Fahrenheit and relative humidity percentage.
+Reads a DHT22 sensor on GPIO16 with a 2-second polling interval (the hardware minimum). Keeps the last good reading on sensor errors. Exposes temperature in Fahrenheit (cached at read time) and relative humidity percentage.
 
 ### `brightness.py`
 PWM backlight control on GPIO38 (1kHz). Boot button (GPIO0) with pull-up and 250ms debounce cycles through 5 brightness levels (100%, 75%, 50%, 25%, 6%).

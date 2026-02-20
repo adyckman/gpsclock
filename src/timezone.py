@@ -61,6 +61,10 @@ def _is_dst(utc_year, utc_month, utc_day, utc_hour, std_offset):
 
 
 class TimezoneManager:
+    __slots__ = ('_index', '_button', '_last_release', '_dst_active',
+                 '_manually_set', '_auto_detected', '_button_down', '_press_start',
+                 '_last_dst_hour', '_last_dst_day')
+
     def __init__(self, button_pin=14):
         self._index = 0
         self._button = Pin(button_pin, Pin.IN, Pin.PULL_UP)

@@ -49,11 +49,35 @@ STATUS_X = 8
 STATUS_Y = 142
 STATUS_CLEAR_W = 180
 
+# Cache key indices (list-based cache instead of dict)
+_K_LOCAL_DATE = 0
+_K_TIME = 1
+_K_TZ = 2
+_K_UTC_DATE = 3
+_K_UTC_TIME = 4
+_K_UTC_LABEL = 5
+_K_SATS = 6
+_K_FIX = 7
+_K_LAT = 8
+_K_LON = 9
+_K_GRID = 10
+_K_UTM = 11
+_K_STATUS = 12
+_K_TEMP = 13
+_K_HUM = 14
+_NUM_KEYS = 15
+
+_EMPTY = ("", BLACK)
+
 
 class DisplayManager:
+    __slots__ = ('_tft', '_cache', '_first_draw',
+                 '_last_siu', '_last_siv', '_last_fix_type', '_last_has_fix',
+                 '_last_temp', '_last_hum')
+
     def __init__(self, tft):
         self._tft = tft
-        self._cache = {}
+        self._cache = [None] * _NUM_KEYS
         self._first_draw = True
         # Raw value caches to skip formatting when unchanged
         self._last_siu = -1
@@ -68,11 +92,12 @@ class DisplayManager:
         self._tft.fill(BLACK)
         self._tft.hline(0, SEP_Y, SCREEN_W, GRAY)
         self._first_draw = True
-        self._cache.clear()
+        for i in range(_NUM_KEYS):
+            self._cache[i] = None
 
     def _draw_text(self, key, text, x, y, font, color, clear_width=0):
         """Only redraw text if it has changed since last call with this key."""
-        prev = self._cache.get(key)
+        prev = self._cache[key]
         if prev is not None and prev[0] == text and prev[1] == color and not self._first_draw:
             return
         self._cache[key] = (text, color)
@@ -112,33 +137,33 @@ class DisplayManager:
         utc_date = gps.date_str(0)
 
         # Line 1: date + local time + TZ
-        self._draw_text("local_date", local_date, DATE_X, LINE1_Y,
+        self._draw_text(_K_LOCAL_DATE, local_date, DATE_X, LINE1_Y,
                          font_big, date_color, clear_width=126)
-        self._draw_text("time", local_time, TIME_X, LINE1_Y,
+        self._draw_text(_K_TIME, local_time, TIME_X, LINE1_Y,
                          font_big, time_color, clear_width=102)
-        self._draw_text("tz", tz.abbreviation, LABEL_X, LINE1_Y,
+        self._draw_text(_K_TZ, tz.abbreviation, LABEL_X, LINE1_Y,
                          font_big, CYAN, clear_width=54)
 
         # Line 2: date + UTC time + "UTC"
-        self._draw_text("utc_date", utc_date, DATE_X, LINE2_Y,
+        self._draw_text(_K_UTC_DATE, utc_date, DATE_X, LINE2_Y,
                          font_big, utc_date_color, clear_width=126)
-        self._draw_text("utc_time", utc_time, TIME_X, LINE2_Y,
+        self._draw_text(_K_UTC_TIME, utc_time, TIME_X, LINE2_Y,
                          font_big, utc_color, clear_width=102)
-        self._draw_text("utc_label", "UTC", LABEL_X, LINE2_Y,
+        self._draw_text(_K_UTC_LABEL, "UTC", LABEL_X, LINE2_Y,
                          font_big, CYAN, clear_width=54)
 
     def _update_gps_info(self, gps, tz):
         """Draw GPS info in Zone B: satellites, fix, coords, grid."""
         if not gps.has_ever_had_fix:
-            self._draw_text("status", "Acquiring satellites...",
+            self._draw_text(_K_STATUS, "Acquiring satellites...",
                              STATUS_X, STATUS_Y, font_small, ORANGE,
                              clear_width=STATUS_CLEAR_W)
-            for key in ("sats", "fix", "lat", "lon", "grid", "utm"):
-                self._cache[key] = ("", BLACK)
+            for k in (_K_SATS, _K_FIX, _K_LAT, _K_LON, _K_GRID, _K_UTM):
+                self._cache[k] = _EMPTY
             return
 
         # Clear acquiring message when we first get a fix
-        self._draw_text("status", "", STATUS_X, STATUS_Y,
+        self._draw_text(_K_STATUS, "", STATUS_X, STATUS_Y,
                          font_small, BLACK, clear_width=STATUS_CLEAR_W)
 
         # Row 1: Sat:U/V | Fix:type
@@ -147,7 +172,7 @@ class DisplayManager:
         if siu != self._last_siu or siv != self._last_siv or self._first_draw:
             self._last_siu = siu
             self._last_siv = siv
-            self._draw_text("sats", "Sat:{}/{}".format(siu, siv), 8, ROW1_Y,
+            self._draw_text(_K_SATS, "Sat:{}/{}".format(siu, siv), 8, ROW1_Y,
                              font_small, WHITE, clear_width=60)
 
         ft = gps.fix_type_str
@@ -155,7 +180,7 @@ class DisplayManager:
         if ft != self._last_fix_type or hf != self._last_has_fix or self._first_draw:
             self._last_fix_type = ft
             self._last_has_fix = hf
-            self._draw_text("fix", "Fix:{}".format(ft), 96, ROW1_Y,
+            self._draw_text(_K_FIX, "Fix:{}".format(ft), 96, ROW1_Y,
                              font_small, GREEN if hf else RED, clear_width=48)
 
         # Row 2: Lat | Lon | Grid
@@ -172,20 +197,20 @@ class DisplayManager:
             utm_text = "-- --E --N"
             coord_color = GRAY
 
-        self._draw_text("lat", lat_text, 8, ROW2_Y,
+        self._draw_text(_K_LAT, lat_text, 8, ROW2_Y,
                          font_small, coord_color, clear_width=72)
-        self._draw_text("lon", lon_text, 84, ROW2_Y,
+        self._draw_text(_K_LON, lon_text, 84, ROW2_Y,
                          font_small, coord_color, clear_width=78)
-        self._draw_text("grid", grid_text, 168, ROW2_Y,
+        self._draw_text(_K_GRID, grid_text, 168, ROW2_Y,
                          font_small, CYAN, clear_width=42)
 
         # Row 3: UTM
-        self._draw_text("utm", utm_text, 8, ROW3_Y,
+        self._draw_text(_K_UTM, utm_text, 8, ROW3_Y,
                          font_small, coord_color, clear_width=130)
 
         # Signal lost warning
         if not gps.has_fix:
-            self._draw_text("status", "Signal lost",
+            self._draw_text(_K_STATUS, "Signal lost",
                              STATUS_X, STATUS_Y, font_small, RED,
                              clear_width=STATUS_CLEAR_W)
 
@@ -197,14 +222,14 @@ class DisplayManager:
             if t != self._last_temp or h != self._last_hum or self._first_draw:
                 self._last_temp = t
                 self._last_hum = h
-                self._draw_text("temp", "{:.1f}F".format(t), 8, ROW4_Y,
+                self._draw_text(_K_TEMP, "{:.1f}F".format(t), 8, ROW4_Y,
                                  font_small, WHITE, clear_width=42)
-                self._draw_text("hum", "{:.1f}%".format(h), 60, ROW4_Y,
+                self._draw_text(_K_HUM, "{:.1f}%".format(h), 60, ROW4_Y,
                                  font_small, WHITE, clear_width=36)
         elif self._last_temp is not None or self._first_draw:
             self._last_temp = None
             self._last_hum = None
-            self._draw_text("temp", "--.-F", 8, ROW4_Y,
+            self._draw_text(_K_TEMP, "--.-F", 8, ROW4_Y,
                              font_small, GRAY, clear_width=42)
-            self._draw_text("hum", "--.-%", 60, ROW4_Y,
+            self._draw_text(_K_HUM, "--.-%", 60, ROW4_Y,
                              font_small, GRAY, clear_width=36)

@@ -9,10 +9,13 @@ _READ_INTERVAL_MS = 2000
 
 
 class DHTReader:
+    __slots__ = ('_sensor', '_last_read', '_temp_c', '_temp_f', '_humidity')
+
     def __init__(self, pin=16):
         self._sensor = dht.DHT22(Pin(pin))
         self._last_read = 0
         self._temp_c = None
+        self._temp_f = None
         self._humidity = None
 
     def update(self):
@@ -24,6 +27,7 @@ class DHTReader:
         try:
             self._sensor.measure()
             self._temp_c = self._sensor.temperature()
+            self._temp_f = self._temp_c * 9.0 / 5.0 + 32.0
             self._humidity = self._sensor.humidity()
         except Exception:
             pass
@@ -34,9 +38,7 @@ class DHTReader:
 
     @property
     def temperature_f(self):
-        if self._temp_c is None:
-            return None
-        return self._temp_c * 9.0 / 5.0 + 32.0
+        return self._temp_f
 
     @property
     def humidity(self):

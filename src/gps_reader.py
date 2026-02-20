@@ -20,6 +20,11 @@ def _days_in_month(month, year):
 
 
 class GPSReader:
+    __slots__ = ('_uart', '_gps', '_has_ever_had_fix',
+                 '_lat_mins', '_lat_dec', '_lon_mins', '_lon_dec',
+                 '_cached_mh_lat', '_cached_mh_lon', '_cached_mh',
+                 '_cached_utm_lat', '_cached_utm_lon', '_cached_utm')
+
     def __init__(self, tx_pin=1, rx_pin=2, baudrate=9600):
         self._uart = UART(1, baudrate=baudrate, tx=Pin(tx_pin), rx=Pin(rx_pin), rxbuf=512)
         self._gps = MicropyGPS()

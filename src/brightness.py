@@ -8,6 +8,8 @@ _DEBOUNCE_MS = 250
 
 
 class BrightnessController:
+    __slots__ = ('_pwm', '_button', '_index', '_last_press')
+
     def __init__(self, backlight_pin=38, button_pin=0):
         self._pwm = PWM(Pin(backlight_pin), freq=1000, duty_u16=_LEVELS[0])
         self._button = Pin(button_pin, Pin.IN, Pin.PULL_UP)
